@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Car Details Manager</title>
+
+  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body{
+      background:#f4f6f9;
+      padding:30px;
+    }
+
+    .container{
+      max-width:1000px;
+      margin:auto;
+      background:white;
+      padding:25px;
+      border-radius:12px;
+      box-shadow:0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    h1{
+      text-align:center;
+      margin-bottom:25px;
+      color:#333;
+    }
+
+    form{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px,1fr));
+      gap:15px;
+      margin-bottom:30px;
+    }
+
+    input, button{
+      padding:12px;
+      border:1px solid #ccc;
+      border-radius:8px;
+      font-size:15px;
+    }
+
+    input:focus{
+      outline:none;
+      border-color:#007bff;
+    }
+
+    button{
+      background:#007bff;
+      color:white;
+      border:none;
+      cursor:pointer;
+    }
+
+    button:hover{
+      background:#0056b3;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:20px;
+    }
+
+    th, td{
+      padding:14px;
+      border-bottom:1px solid #ddd;
+      text-align:center;
+    }
+
+    th{
+      background:#007bff;
+      color:white;
+    }
+
+    tr:hover{
+      background:#f1f1f1;
+    }
+
+    .expired{ color:red; font-weight:bold; }
+    .valid{ color:green; font-weight:bold; }
+    .warning{ color:orange; font-weight:bold; }
+
+    /* ✅ NEW: TODAY HIGHLIGHT */
+    .today-highlight{
+      background: yellow !important;
+      font-weight: bold;
+    }
+
+    .delete-btn{
+      background:red;
+      padding:8px 12px;
+      border:none;
+      color:white;
+      border-radius:5px;
+      cursor:pointer;
+    }
+
+    .delete-btn:hover{
+      background:darkred;
+    }
+
+    @media(max-width:768px){
+      table{
+        display:block;
+        overflow-x:auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <h1>Car Details & Document Tracker</h1>
+
+  <form id="carForm">
+    <input type="text" id="carName" placeholder="Car Name" required>
+    <input type="text" id="carNumber" placeholder="Car Number" required>
+
+    <div>
+      <label>Insurance Expiry Date</label>
+      <input type="date" id="insuranceDate" required>
+    </div>
+
+    <div>
+      <label>PUC Expiry Date</label>
+      <input type="date" id="pucDate" required>
+    </div>
+
+    <div>
+      <label>Fitness Expiry Date</label>
+      <input type="date" id="fitnessDate" required>
+    </div>
+
+    <button type="submit">Add Car</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Car Name</th>
+        <th>Car Number</th>
+        <th>Insurance</th>
+        <th>PUC</th>
+        <th>Fitness</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="carTableBody"></tbody>
+  </table>
+</div>
+
+<script>
+  const form = document.getElementById('carForm');
+  const tableBody = document.getElementById('carTableBody');
+
+  let cars = JSON.parse(localStorage.getItem('cars')) || [];
+
+  /* ---------------- NOTIFICATION ---------------- */
+  if ("Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+
+  function sendAlert(message) {
+    if (Notification.permission === "granted") {
+      new Notification("Car Document Alert", {
+        body: message
+      });
+    } else {
+      alert(message);
+    }
+  }
+
+  /* ---------------- DATE HELPERS ---------------- */
+  function formatDate(dateStr){
+    const d = new Date(dateStr);
+    return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+  }
+
+  function isToday(dateStr){
+    const d = new Date(dateStr);
+    const t = new Date();
+
+    return (
+      d.getDate() === t.getDate() &&
+      d.getMonth() === t.getMonth() &&
+      d.getFullYear() === t.getFullYear()
+    );
+  }
+
+  /* ---------------- STATUS ---------------- */
+  function getStatus(date, type){
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const expiry = new Date(date);
+    expiry.setHours(0,0,0,0);
+
+    const diffDays = Math.ceil((expiry - today)/(1000*60*60*24));
+
+    if(diffDays < 0) return '<span class="expired">Expired</span>';
+
+    if(type==="insurance" && diffDays<=10)
+      return `<span class="warning">⚠ Expiring in ${diffDays} days</span>`;
+
+    if(type==="puc" && diffDays<=10)
+      return `<span class="warning">⚠ Expiring in ${diffDays} days</span>`;
+
+    if(type==="fitness" && diffDays<=90)
+      return `<span class="warning">⚠ Expiring in ${diffDays} days</span>`;
+
+    return '<span class="valid">Valid</span>';
+  }
+
+  /* ---------------- RENDER ---------------- */
+  function renderCars(){
+    tableBody.innerHTML = '';
+
+    cars.forEach((car,index)=>{
+      tableBody.innerHTML += `
+        <tr>
+          <td>${car.name}</td>
+          <td>${car.number}</td>
+
+          <td class="${isToday(car.insurance) ? 'today-highlight' : ''}">
+            ${formatDate(car.insurance)}<br>${getStatus(car.insurance,"insurance")}
+          </td>
+
+          <td class="${isToday(car.puc) ? 'today-highlight' : ''}">
+            ${formatDate(car.puc)}<br>${getStatus(car.puc,"puc")}
+          </td>
+
+          <td class="${isToday(car.fitness) ? 'today-highlight' : ''}">
+            ${formatDate(car.fitness)}<br>${getStatus(car.fitness,"fitness")}
+          </td>
+
+          <td>
+            <button class="delete-btn" onclick="deleteCar(${index})">Delete</button>
+          </td>
+        </tr>
+      `;
+    });
+  }
+
+  /* ---------------- DELETE ---------------- */
+  function deleteCar(index){
+    cars.splice(index,1);
+    localStorage.setItem('cars', JSON.stringify(cars));
+    renderCars();
+  }
+
+  /* ---------------- ADD ---------------- */
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+
+    const car = {
+      name: carName.value,
+      number: carNumber.value,
+      insurance: insuranceDate.value,
+      puc: pucDate.value,
+      fitness: fitnessDate.value
+    };
+
+    cars.push(car);
+    localStorage.setItem('cars', JSON.stringify(cars));
+
+    form.reset();
+    renderCars();
+  });
+
+  /* ---------------- ALERTS ---------------- */
+  function checkAlerts() {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    cars.forEach(car=>{
+      checkSingle(car.name,"Insurance",car.insurance,10);
+      checkSingle(car.name,"PUC",car.puc,10);
+      checkSingle(car.name,"Fitness",car.fitness,90);
+    });
+
+    function checkSingle(name,type,dateStr,limit){
+      const expiry = new Date(dateStr);
+      expiry.setHours(0,0,0,0);
+
+      const diffDays = Math.ceil((expiry - today)/(1000*60*60*24));
+
+      if(diffDays>=0 && diffDays<=limit){
+        sendAlert(`${type} for ${name} will expire in ${diffDays} day(s)`);
+      }
+    }
+  }
+
+  renderCars();
+  checkAlerts();
+  setInterval(checkAlerts, 12 * 60 * 60 * 1000);
+</script>
+
+</body>
+</html>
